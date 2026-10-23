@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.QingPing" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:colorAccent">@color/mint</item>
+        <item name="android:statusBarColor">@color/bg</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:navigationBarColor">@color/navy</item>
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+
+    <style name="Text.Title" parent="">
+        <item name="android:textColor">@color/ink</item>
+        <item name="android:textSize">28sp</item>
+        <item name="android:fontFamily">sans-serif-black</item>
+        <item name="android:letterSpacing">0.04</item>
+    </style>
+
+    <style name="Text.Section" parent="">
+        <item name="android:textColor">@color/ink</item>
+        <item name="android:textSize">17sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+
+    <style name="Text.Body" parent="">
+        <item name="android:textColor">@color/ink_soft</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <style name="Text.Muted" parent="">
+        <item name="android:textColor">@color/muted</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+</resources>

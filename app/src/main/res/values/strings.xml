@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">清屏</string>
+    <string name="app_tagline">开屏广告 · 误触跳转 守护</string>
+
+    <string name="accessibility_label">清屏守护</string>
+    <string name="accessibility_summary">自动跳过开屏广告，拦截误触跳转</string>
+    <string name="accessibility_description">清屏通过无障碍服务读取当前窗口里的按钮文字，自动点击「跳过」「关闭广告」；当其他应用突然跳转到购物 App 或浏览器时，尝试返回。屏幕内容只在本机处理，应用没有联网权限，也不会上传任何数据。</string>
+
+    <string name="status_on">守护中</string>
+    <string name="status_off">未开启</string>
+    <string name="status_paused">已暂停</string>
+    <string name="hero_title">已为你清屏</string>
+    <string name="hero_unit">次</string>
+    <string name="label_today">今日拦截</string>
+    <string name="label_jump">误触返回</string>
+    <string name="label_apps">覆盖 App</string>
+    <string name="hero_off_hint">开启无障碍守护后，才能自动跳过广告  →</string>
+    <string name="hero_on_hint">只在本机记录次数，不上传屏幕内容</string>
+    <string name="hero_paused_hint">守护已暂停，可在「更多设置」中重新开启  →</string>
+
+    <string name="section_status">守护状态</string>
+    <string name="row_accessibility">无障碍服务</string>
+    <string name="row_battery">电池优化</string>
+    <string name="row_boot">开机与后台</string>
+    <string name="state_on">已开启</string>
+    <string name="state_off">未开启</string>
+    <string name="state_battery_ok">已允许后台运行</string>
+    <string name="state_battery_bad">可能被系统清理</string>
+    <string name="state_boot_ok">开机自动恢复守护</string>
+    <string name="state_boot_tip">建议按机型设置自启动</string>
+    <string name="action_enable">去开启</string>
+    <string name="action_go">去设置</string>
+    <string name="action_view">查看</string>
+
+    <string name="section_stats">按 App 统计</string>
+    <string name="stats_hint">点击某一行查看最近记录</string>
+    <string name="stats_empty_title">还没有拦截记录</string>
+    <string name="stats_empty_desc">开启守护后，跳过的开屏广告和拦下的误触跳转会记录在这里。</string>
+    <string name="stats_total_unit">次</string>
+    <string name="stats_splash">开屏</string>
+    <string name="stats_jump">误触</string>
+    <string name="stats_today">今日 %d</string>
+    <string name="stats_last">最近 %s</string>
+
+    <string name="section_rules">拦截规则</string>
+    <string name="rule_splash">开屏广告自动跳过</string>
+    <string name="rule_splash_desc">识别「跳过 / 关闭广告」并自动点击</string>
+    <string name="rule_jump">误触跳转自动返回</string>
+    <string name="rule_jump_desc">突然跳到购物 App、浏览器时尝试返回</string>
+    <string name="rule_more">更多设置</string>
+    <string name="rule_more_desc">识别时长、点击延迟、跳转名单</string>
+
+    <string name="privacy_footer">无联网权限 · 数据仅保存在本机</string>
+    <string name="version_footer">清屏 v1.0.0</string>
+
+    <string name="dialog_accessibility_title">开启无障碍服务</string>
+    <string name="dialog_accessibility_message">1. 在系统无障碍列表中找到「清屏」\n2. 打开「清屏守护」\n3. 若提示「受限设置」，先进入 应用信息 → 右上角 ⋮ → 允许受限设置\n\n清屏只在本机读取窗口文字，没有联网权限。</string>
+    <string name="dialog_accessibility_confirm">去无障碍设置</string>
+    <string name="dialog_battery_title">允许后台运行</string>
+    <string name="dialog_battery_message">Android 和部分厂商会清理后台应用。请允许清屏忽略电池优化，并在系统设置中允许「自启动 / 后台运行」。\n\n即使应用界面被清理，只要无障碍服务仍处于开启状态，系统通常会重新绑定它。</string>
+    <string name="dialog_battery_confirm">去电池设置</string>
+    <string name="dialog_autostart_title">开机与后台保活</string>
+    <string name="dialog_autostart_message">清屏已注册开机广播，并会尝试在开机后恢复守护通知。\n\n国产 ROM 还需要手动允许自启动：\n• 小米：安全中心 → 应用管理 → 权限 → 自启动\n• 华为：手机管家 → 应用启动管理 → 清屏 → 手动管理\n• OPPO / 一加：设置 → 应用管理 → 自启动\n• vivo：i管家 → 应用管理 → 权限管理 → 自启动\n• 三星：设置 → 电池 → 后台使用限制\n\n系统「强行停止」应用后，任何应用都无法自行恢复，需要重新打开清屏。</string>
+    <string name="dialog_autostart_confirm">尝试打开自启动设置</string>
+    <string name="dialog_clear_title">清空统计？</string>
+    <string name="dialog_clear_message">所有按 App 的拦截记录都会被删除，且无法恢复。守护设置不会改变。</string>
+    <string name="action_clear">清空</string>
+    <string name="action_cancel">取消</string>
+    <string name="action_ok">知道了</string>
+    <string name="action_save">保存</string>
+    <string name="action_close">关闭</string>
+
+    <string name="toast_skip">已跳过 %1$s 的开屏广告</string>
+    <string name="toast_close">已关闭 %1$s 的广告</string>
+    <string name="toast_jump">已拦截跳转：%1$s</string>
+    <string name="toast_need_accessibility">请先开启清屏的无障碍服务</string>
+
+    <string name="detail_title">%1$s 的拦截记录</string>
+    <string name="detail_summary">开屏 %1$d 次 · 误触返回 %2$d 次\n今日 %3$d 次 · 累计 %4$d 次</string>
+    <string name="detail_recent">最近记录</string>
+    <string name="detail_empty">暂无记录</string>
+    <string name="detail_clear">清除此 App 记录</string>
+    <string name="kind_skip">跳过开屏</string>
+    <string name="kind_close">关闭广告</string>
+    <string name="kind_jump">误触返回 → %1$s</string>
+
+    <string name="settings_title">更多设置</string>
+    <string name="settings_master_section">守护开关</string>
+    <string name="settings_master">启用清屏守护</string>
+    <string name="settings_master_desc">关闭后保留统计，但不再执行跳过与返回</string>
+    <string name="settings_splash_section">开屏跳过</string>
+    <string name="settings_open_window">启动保护时长</string>
+    <string name="settings_open_window_desc">应用切换后，只在这段时间内识别开屏广告</string>
+    <string name="settings_click_delay">点击延迟</string>
+    <string name="settings_click_delay_desc">等待广告按钮出现后再点击，太大可能错过</string>
+    <string name="settings_toast">拦截后轻提示</string>
+    <string name="settings_toast_desc">用一条短提示告诉你刚刚做了什么</string>
+    <string name="settings_corner">右上角兜底点击</string>
+    <string name="settings_corner_desc">仅当页面出现广告文字、但按钮未暴露时尝试。可能误点，默认关闭</string>
+    <string name="settings_jump_section">误触返回</string>
+    <string name="settings_jump_only_splash">仅在开屏保护期内拦截</string>
+    <string name="settings_jump_only_splash_desc">更保守，减少误拦正常链接跳转</string>
+    <string name="settings_targets">跳转拦截名单</string>
+    <string name="settings_targets_desc">选择哪些 App 被突然打开时需要返回</string>
+    <string name="settings_keep_section">后台与通知</string>
+    <string name="settings_watchdog">常驻守护通知</string>
+    <string name="settings_watchdog_desc">显示一条低优先级通知，降低被系统回收的概率</string>
+    <string name="settings_battery">电池优化</string>
+    <string name="settings_battery_desc">允许后台运行，减少被清理</string>
+    <string name="settings_data_section">数据</string>
+    <string name="settings_clear">清空全部统计</string>
+    <string name="settings_clear_desc">只删除记录，不影响设置</string>
+    <string name="settings_about">关于清屏</string>
+    <string name="settings_about_desc">v1.0.0 · 本地模式 · 无联网权限</string>
+    <string name="settings_corner_warning_title">确定开启兜底点击？</string>
+    <string name="settings_corner_warning">当页面出现「广告 / 跳过」等文字，却找不到可点击按钮时，清屏会尝试点击屏幕右上角。\n\n有些应用会把真实按钮放在别处，这可能误点应用内功能。建议只在必要时开启。</string>
+    <string name="settings_target_count">已选 %1$d 个 App</string>
+    <string name="settings_sec_suffix">秒</string>
+    <string name="settings_ms_suffix">毫秒</string>
+
+    <string name="picker_title">跳转拦截名单</string>
+    <string name="picker_desc">从别的应用突然跳到这些 App 时，清屏会尝试按返回键。被选中的通常是购物、浏览器、应用商店。</string>
+    <string name="picker_search">搜索应用名称或包名</string>
+    <string name="picker_selected">已选 %1$d 个</string>
+    <string name="picker_empty">没有找到应用</string>
+    <string name="picker_save">保存</string>
+
+    <string name="notif_channel_name">守护状态</string>
+    <string name="notif_channel_desc">显示清屏是否正在运行</string>
+    <string name="notif_title">清屏正在守护</string>
+    <string name="notif_text">开屏跳过与误触返回已就绪</string>
+    <string name="notif_text_off">无障碍服务未开启，点此开启</string>
+    <string name="notif_text_count">已累计拦截 %1$d 次 · 点此查看统计</string>
+    <string name="notif_action">打开清屏</string>
+
+    <string name="error_no_apps">无法读取应用列表</string>
+    <string name="permission_notification_needed">通知权限未开启，常驻通知可能不可见</string>
+</resources>
