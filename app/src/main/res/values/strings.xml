@@ -52,7 +52,7 @@
     <string name="rule_more_desc">识别时长、点击延迟、跳转名单</string>
 
     <string name="privacy_footer">无联网权限 · 数据仅保存在本机</string>
-    <string name="version_footer">清屏 v1.0.0</string>
+    <string name="version_footer">清屏 v1.0.1</string>
 
     <string name="dialog_accessibility_title">开启无障碍服务</string>
     <string name="dialog_accessibility_message">1. 在系统无障碍列表中找到「清屏」\n2. 打开「清屏守护」\n3. 若提示「受限设置」，先进入 应用信息 → 右上角 ⋮ → 允许受限设置\n\n清屏只在本机读取窗口文字，没有联网权限。</string>
@@ -91,7 +91,7 @@
     <string name="settings_master_desc">关闭后保留统计，但不再执行跳过与返回</string>
     <string name="settings_splash_section">开屏跳过</string>
     <string name="settings_open_window">启动保护时长</string>
-    <string name="settings_open_window_desc">应用切换后，只在这段时间内识别开屏广告</string>
+    <string name="settings_open_window_desc">应用切换后完整识别开屏广告的时长；之后仍会继续等待明确的「跳过 / 关闭广告」最多 30 秒</string>
     <string name="settings_click_delay">点击延迟</string>
     <string name="settings_click_delay_desc">等待广告按钮出现后再点击，太大可能错过</string>
     <string name="settings_toast">拦截后轻提示</string>
@@ -112,7 +112,7 @@
     <string name="settings_clear">清空全部统计</string>
     <string name="settings_clear_desc">只删除记录，不影响设置</string>
     <string name="settings_about">关于清屏</string>
-    <string name="settings_about_desc">v1.0.0 · 本地模式 · 无联网权限</string>
+    <string name="settings_about_desc">v1.0.1 · 本地模式 · 无联网权限</string>
     <string name="settings_corner_warning_title">确定开启兜底点击？</string>
     <string name="settings_corner_warning">当页面出现「广告 / 跳过」等文字，却找不到可点击按钮时，清屏会尝试点击屏幕右上角。\n\n有些应用会把真实按钮放在别处，这可能误点应用内功能。建议只在必要时开启。</string>
     <string name="settings_target_count">已选 %1$d 个 App</string>

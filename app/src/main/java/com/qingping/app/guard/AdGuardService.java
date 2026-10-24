@@ -8,6 +8,7 @@ import android.graphics.Rect;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 
@@ -25,14 +26,27 @@ import java.util.Set;
  *
  * It never tries to block network requests or touches. It only performs an accessibility click
  * on a button whose own text says "跳过/关闭广告", or a BACK gesture after an unexpected app
- * switch. All matching is deliberately scoped to the first few seconds after a foreground app
- * change to avoid interfering with normal app UI.
+ * switch. All matching is scoped to a cold-start watch after a foreground app change: the normal
+ * launch window allows generic close buttons, then a longer, explicit-label-only watch covers
+ * apps that show a branded loading screen before their splash ad.
  */
 public class AdGuardService extends AccessibilityService {
+    private static final String TAG = "QingPing";
     private static final int MAX_NODES = 2200;
     private static final int MAX_DEPTH = 24;
-    private static final int MAX_SCANS = 10;
+    // One retry budget for the whole cold-start watch; 30 s at ~1 s intervals stays well below it.
+    private static final int MAX_SCANS = 45;
+
+    /**
+     * Some apps (Baidu Netdisk is a typical one) keep a branded loading screen for much longer
+     * than the normal launch window and only then show the splash ad. The strict window is still
+     * used for generic "关闭/×" buttons and for mis-tap detection, but we keep watching for
+     * explicit "跳过/关闭广告" buttons for this much longer. This is what makes a delayed ad
+     * catchable without turning the guard into a page-wide "close anything" clicker.
+     */
+    private static final long EXTENDED_WATCH_MS = 30_000L;
     private static final long SCAN_RETRY_MS = 1100L;
+    private static final long EXTENDED_SCAN_RETRY_MS = 900L;
     private static final long ACTION_COOLDOWN_MS = 1200L;
     private static final long JUMP_COOLDOWN_MS = 2500L;
 
@@ -62,10 +76,13 @@ public class AdGuardService extends AccessibilityService {
 
     private String foregroundPkg;
     private long foregroundSince;
+    private String foregroundWindowClass;
     private String handledPkg;
     private long lastActionAt;
+    private long lastPageResetAt;
     private int scanAttempts;
     private boolean scanScheduled;
+    private boolean extendedPhaseLogged;
 
     private long lastInteractionAt;
     private String lastInteractionPkg;
@@ -127,8 +144,9 @@ public class AdGuardService extends AccessibilityService {
             String pkg = root.getPackageName().toString();
             if (!pkg.equals(getPackageName()) && !homePackages.contains(pkg)) {
                 foregroundPkg = pkg;
+                foregroundWindowClass = null;
                 // We joined mid-session: don't treat the current app as freshly launched.
-                foregroundSince = SystemClock.uptimeMillis() - launchWindowMs - 1L;
+                foregroundSince = SystemClock.uptimeMillis() - extendedWatchMs() - 1L;
             }
         } catch (Exception ignored) {
         }
@@ -163,10 +181,12 @@ public class AdGuardService extends AccessibilityService {
         if (homePackages.contains(pkg)) {
             foregroundPkg = null;
             foregroundSince = 0;
+            foregroundWindowClass = null;
             handledPkg = null;
+            lastPageResetAt = 0;
             scanAttempts = 0;
-            scanScheduled = false;
-            handler.removeCallbacks(scanRunnable);
+            extendedPhaseLogged = false;
+            cancelScheduledScan();
             return;
         }
         if (ignoredPackages.contains(pkg)) {
@@ -174,16 +194,20 @@ public class AdGuardService extends AccessibilityService {
         }
 
         if (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            String windowClass = classNameOf(event);
             boolean appChanged = !pkg.equals(foregroundPkg);
             if (appChanged) {
                 String previous = foregroundPkg;
                 long previousSince = foregroundSince;
                 foregroundPkg = pkg;
                 foregroundSince = now;
+                foregroundWindowClass = windowClass;
                 handledPkg = null;
+                lastPageResetAt = now;
                 scanAttempts = 0;
-                scanScheduled = false;
-                handler.removeCallbacks(scanRunnable);
+                extendedPhaseLogged = false;
+                cancelScheduledScan();
+                Log.d(TAG, "foreground=" + pkg + " class=" + windowClass);
 
                 if (jumpEnabled && jumpTargets.contains(pkg)
                         && shouldBlockJump(previous, pkg, previousSince, now)) {
@@ -194,7 +218,27 @@ public class AdGuardService extends AccessibilityService {
                     scheduleScan(220L);
                 }
             } else {
-                scheduleScan(260L);
+                // A long branding/loading activity often hands over to a separate ad activity in
+                // the same package. Treat that as a fresh page: otherwise the retry budget has
+                // already been spent on the logo and the ad is never examined.
+                boolean pageChanged = windowClass != null
+                        && foregroundWindowClass != null
+                        && !windowClass.equals(foregroundWindowClass);
+                if (windowClass != null) {
+                    foregroundWindowClass = windowClass;
+                }
+                if (pageChanged) {
+                    Log.d(TAG, "page=" + windowClass + " age=" + (now - foregroundSince)
+                            + "ms scans=" + scanAttempts);
+                }
+                if (pageChanged && now - foregroundSince <= extendedWatchMs()
+                        && now - lastPageResetAt >= 1500L) {
+                    lastPageResetAt = now;
+                    scanAttempts = 0;
+                    extendedPhaseLogged = false;
+                    cancelScheduledScan();
+                }
+                scheduleScan(pageChanged ? 180L : 260L);
             }
         } else if (type == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
             if (pkg.equals(foregroundPkg)) {
@@ -259,6 +303,31 @@ public class AdGuardService extends AccessibilityService {
         return null;
     }
 
+    private static String classNameOf(AccessibilityEvent event) {
+        CharSequence cls = event.getClassName();
+        if (cls == null || cls.length() == 0) {
+            return null;
+        }
+        return cls.toString();
+    }
+
+    /**
+     * How long we are willing to wait for a delayed splash ad. The user's "启动保护时长" still
+     * defines when generic close buttons and mis-tap returns are allowed; this longer cap only
+     * keeps looking for unambiguous "跳过/关闭广告" buttons.
+     */
+    private long extendedWatchMs() {
+        return Math.max(launchWindowMs, EXTENDED_WATCH_MS);
+    }
+
+    private boolean isStrictPhase(long now) {
+        return now - foregroundSince <= launchWindowMs;
+    }
+
+    private boolean isExtendedPhase(long now) {
+        return now - foregroundSince <= extendedWatchMs();
+    }
+
     private void scheduleScan(long delay) {
         if (!master || !splashEnabled || scanScheduled) {
             return;
@@ -268,8 +337,8 @@ public class AdGuardService extends AccessibilityService {
             return;
         }
         long now = SystemClock.uptimeMillis();
-        long age = now - foregroundSince;
-        if (age > launchWindowMs || now < suppressSplashUntil) {
+        boolean strict = isStrictPhase(now);
+        if ((!strict && !isExtendedPhase(now)) || now < suppressSplashUntil) {
             return;
         }
         if (foregroundPkg.equals(handledPkg) || scanAttempts >= MAX_SCANS) {
@@ -286,24 +355,29 @@ public class AdGuardService extends AccessibilityService {
             return;
         }
         long now = SystemClock.uptimeMillis();
-        if (now - foregroundSince > launchWindowMs) {
+        boolean strict = isStrictPhase(now);
+        if (!strict && !isExtendedPhase(now)) {
             return;
         }
-        if (foregroundPkg.equals(handledPkg) || now - lastActionAt < ACTION_COOLDOWN_MS) {
+        if (!strict && !extendedPhaseLogged) {
+            extendedPhaseLogged = true;
+            Log.d(TAG, "extended watch pkg=" + foregroundPkg + " age=" + (now - foregroundSince) + "ms");
+        }
+        if (foregroundPkg.equals(handledPkg) || now - lastActionAt < ACTION_COOLDOWN_MS
+                || scanAttempts >= MAX_SCANS) {
             return;
         }
         scanAttempts++;
         String pkg = foregroundPkg;
-        scanOnce(pkg);
+        scanOnce(pkg, strict);
 
         if (master && splashEnabled && pkg.equals(foregroundPkg)
-                && !pkg.equals(handledPkg) && scanAttempts < MAX_SCANS
-                && SystemClock.uptimeMillis() - foregroundSince <= launchWindowMs) {
-            scheduleScan(SCAN_RETRY_MS);
+                && !pkg.equals(handledPkg)) {
+            scheduleScan(strict ? SCAN_RETRY_MS : EXTENDED_SCAN_RETRY_MS);
         }
     }
 
-    private void scanOnce(String pkg) {
+    private void scanOnce(String pkg, boolean strictPhase) {
         AccessibilityNodeInfo root;
         try {
             root = getRootInActiveWindow();
@@ -322,34 +396,45 @@ public class AdGuardService extends AccessibilityService {
             // The window can disappear mid-traversal; never let that crash the guard.
             return;
         }
-        Candidate best = state.best(state.adMarker);
+        // Outside the strict launch window only click labels that explicitly say they dismiss
+        // an ad. A generic "关闭/×" is too easy to confuse with normal app UI on a page the user
+        // may have reached much later.
+        Candidate best = state.best(state.adMarker, strictPhase);
         if (best == null) {
-            if (cornerFallback && state.adMarker) {
+            if (strictPhase && cornerFallback && state.adMarker) {
                 cornerFallbackClick(pkg);
             }
             return;
         }
 
-        String normalized = Rules.normalize(best.label);
-        boolean isSkip = Rules.isSkipText(normalized);
+        Log.d(TAG, "candidate=" + best.label + " kind=" + best.kind + " score=" + best.score
+                + " age=" + (SystemClock.uptimeMillis() - foregroundSince) + "ms");
         boolean clicked = clickNode(best.node, best.bounds);
         if (!clicked && best.bounds != null) {
             clicked = tap(best.bounds.centerX(), best.bounds.centerY());
         }
         if (!clicked) {
+            Log.d(TAG, "click failed for " + best.label);
             return;
         }
 
+        boolean isSkip = best.kind == Candidate.KIND_SKIP;
         String kind = isSkip ? StatsDb.KIND_SKIP : StatsDb.KIND_CLOSE;
         String appLabel = AppInfoUtils.label(this, pkg);
         String detail = best.label == null ? "" : best.label;
         StatsDb.get(this).record(pkg, appLabel, kind, null, detail);
         handledPkg = pkg;
         lastActionAt = SystemClock.uptimeMillis();
+        Log.i(TAG, "clicked " + kind + " in " + pkg + " label=" + detail);
         if (showToast) {
             int res = isSkip ? R.string.toast_skip : R.string.toast_close;
             GuardUtils.toast(this, getString(res, appLabel));
         }
+    }
+
+    private void cancelScheduledScan() {
+        scanScheduled = false;
+        handler.removeCallbacks(scanRunnable);
     }
 
     private void cornerFallbackClick(String pkg) {
@@ -389,12 +474,16 @@ public class AdGuardService extends AccessibilityService {
                 Rect b = new Rect();
                 node.getBoundsInScreen(b);
                 if (isUsableBounds(b)) {
+                    int kind;
                     int score;
                     if (skip) {
+                        kind = Candidate.KIND_SKIP;
                         score = 110;
                     } else if (closeAd) {
+                        kind = Candidate.KIND_CLOSE_AD;
                         score = 85;
                     } else {
+                        kind = Candidate.KIND_EXACT_CLOSE;
                         score = 50;
                     }
                     if (isTopRight(b)) {
@@ -409,7 +498,7 @@ public class AdGuardService extends AccessibilityService {
                     if ((long) b.width() * b.height() > (long) screenWidth * screenHeight / 2) {
                         score -= 25;
                     }
-                    state.candidates.add(new Candidate(node, label, new Rect(b), score, skip));
+                    state.candidates.add(new Candidate(node, label, new Rect(b), score, kind));
                 }
             }
         }
@@ -518,10 +607,10 @@ public class AdGuardService extends AccessibilityService {
         boolean adMarker;
         final List<Candidate> candidates = new ArrayList<>();
 
-        Candidate best(boolean hasAd) {
+        Candidate best(boolean hasAd, boolean allowGenericClose) {
             Candidate best = null;
             for (Candidate c : candidates) {
-                if (!c.isSkip && !hasAd) {
+                if (c.kind == Candidate.KIND_EXACT_CLOSE && (!allowGenericClose || !hasAd)) {
                     continue;
                 }
                 if (best == null || c.score > best.score) {
@@ -533,18 +622,22 @@ public class AdGuardService extends AccessibilityService {
     }
 
     private static final class Candidate {
+        static final int KIND_SKIP = 0;
+        static final int KIND_CLOSE_AD = 1;
+        static final int KIND_EXACT_CLOSE = 2;
+
         final AccessibilityNodeInfo node;
         final String label;
         final Rect bounds;
         final int score;
-        final boolean isSkip;
+        final int kind;
 
-        Candidate(AccessibilityNodeInfo node, String label, Rect bounds, int score, boolean isSkip) {
+        Candidate(AccessibilityNodeInfo node, String label, Rect bounds, int score, int kind) {
             this.node = node;
             this.label = label;
             this.bounds = bounds;
             this.score = score;
-            this.isSkip = isSkip;
+            this.kind = kind;
         }
     }
 
