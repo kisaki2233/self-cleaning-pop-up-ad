@@ -24,6 +24,8 @@ public final class Prefs {
     public static final String KEY_JUMP_WINDOW = "jump_window_ms";
     public static final String KEY_TARGETS = "jump_targets";
     public static final String KEY_TARGETS_INIT = "jump_targets_initialized";
+    public static final String KEY_APP_WHITELIST = "app_whitelist";
+    public static final String KEY_APP_BLACKLIST = "app_blacklist";
     public static final String KEY_FIRST_RUN = "first_run_done";
 
     private Prefs() {
@@ -99,6 +101,40 @@ public final class Prefs {
         get(c).edit()
                 .putStringSet(KEY_TARGETS, new HashSet<>(targets))
                 .putBoolean(KEY_TARGETS_INIT, true)
+                .apply();
+    }
+
+    /**
+     * App scope: empty whitelist means "all apps", and the blacklist always wins. The two sets
+     * are kept disjoint so the picker never shows one app in both roles.
+     */
+    public static Set<String> appWhitelist(Context c) {
+        Set<String> stored = get(c).getStringSet(KEY_APP_WHITELIST, null);
+        return stored == null ? new HashSet<>() : new HashSet<>(stored);
+    }
+
+    public static Set<String> appBlacklist(Context c) {
+        Set<String> stored = get(c).getStringSet(KEY_APP_BLACKLIST, null);
+        return stored == null ? new HashSet<>() : new HashSet<>(stored);
+    }
+
+    public static void setAppWhitelist(Context c, Set<String> whitelist) {
+        Set<String> nextWhite = new HashSet<>(whitelist);
+        Set<String> nextBlack = appBlacklist(c);
+        nextBlack.removeAll(nextWhite);
+        get(c).edit()
+                .putStringSet(KEY_APP_WHITELIST, nextWhite)
+                .putStringSet(KEY_APP_BLACKLIST, nextBlack)
+                .apply();
+    }
+
+    public static void setAppBlacklist(Context c, Set<String> blacklist) {
+        Set<String> nextBlack = new HashSet<>(blacklist);
+        Set<String> nextWhite = appWhitelist(c);
+        nextWhite.removeAll(nextBlack);
+        get(c).edit()
+                .putStringSet(KEY_APP_BLACKLIST, nextBlack)
+                .putStringSet(KEY_APP_WHITELIST, nextWhite)
                 .apply();
     }
 

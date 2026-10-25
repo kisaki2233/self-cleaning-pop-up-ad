@@ -52,7 +52,7 @@
     <string name="rule_more_desc">识别时长、点击延迟、跳转名单</string>
 
     <string name="privacy_footer">无联网权限 · 数据仅保存在本机</string>
-    <string name="version_footer">清屏 v1.0.1</string>
+    <string name="version_footer">清屏 v1.1.0</string>
 
     <string name="dialog_accessibility_title">开启无障碍服务</string>
     <string name="dialog_accessibility_message">1. 在系统无障碍列表中找到「清屏」\n2. 打开「清屏守护」\n3. 若提示「受限设置」，先进入 应用信息 → 右上角 ⋮ → 允许受限设置\n\n清屏只在本机读取窗口文字，没有联网权限。</string>
@@ -90,6 +90,14 @@
     <string name="settings_master">启用清屏守护</string>
     <string name="settings_master_desc">关闭后保留统计，但不再执行跳过与返回</string>
     <string name="settings_splash_section">开屏跳过</string>
+    <string name="settings_app_scope_section">应用范围</string>
+    <string name="settings_whitelist">应用白名单</string>
+    <string name="settings_whitelist_all">未设置 · 默认处理全部 App</string>
+    <string name="settings_whitelist_count">仅处理已选的 %1$d 个 App</string>
+    <string name="settings_blacklist">应用黑名单</string>
+    <string name="settings_blacklist_none">未排除任何 App</string>
+    <string name="settings_blacklist_count">已排除 %1$d 个 App</string>
+    <string name="settings_app_scope_desc">白名单留空 = 全部 App；黑名单优先。这里只控制“以该 App 为来源时是否处理”，独立于下面的跳转拦截名单。</string>
     <string name="settings_open_window">启动保护时长</string>
     <string name="settings_open_window_desc">应用切换后完整识别开屏广告的时长；之后仍会继续等待明确的「跳过 / 关闭广告」最多 30 秒</string>
     <string name="settings_click_delay">点击延迟</string>
@@ -112,7 +120,7 @@
     <string name="settings_clear">清空全部统计</string>
     <string name="settings_clear_desc">只删除记录，不影响设置</string>
     <string name="settings_about">关于清屏</string>
-    <string name="settings_about_desc">v1.0.1 · 本地模式 · 无联网权限</string>
+    <string name="settings_about_desc">v1.1.0 · 本地模式 · 无联网权限</string>
     <string name="settings_corner_warning_title">确定开启兜底点击？</string>
     <string name="settings_corner_warning">当页面出现「广告 / 跳过」等文字，却找不到可点击按钮时，清屏会尝试点击屏幕右上角。\n\n有些应用会把真实按钮放在别处，这可能误点应用内功能。建议只在必要时开启。</string>
     <string name="settings_target_count">已选 %1$d 个 App</string>
@@ -121,8 +129,13 @@
 
     <string name="picker_title">跳转拦截名单</string>
     <string name="picker_desc">从别的应用突然跳到这些 App 时，清屏会尝试按返回键。被选中的通常是购物、浏览器、应用商店。</string>
+    <string name="picker_title_whitelist">应用白名单</string>
+    <string name="picker_desc_whitelist">只对勾选的 App（作为来源）执行开屏跳过和误触返回。一个都不选表示处理全部 App；黑名单中的 App 永远不会被处理。</string>
+    <string name="picker_title_blacklist">应用黑名单</string>
+    <string name="picker_desc_blacklist">以这些 App 为来源时，清屏不自动跳过、也不做误触返回。黑名单优先于白名单。</string>
     <string name="picker_search">搜索应用名称或包名</string>
     <string name="picker_selected">已选 %1$d 个</string>
+    <string name="picker_whitelist_all">未选择 · 默认处理全部 App</string>
     <string name="picker_empty">没有找到应用</string>
     <string name="picker_save">保存</string>
 

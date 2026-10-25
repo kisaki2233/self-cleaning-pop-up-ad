@@ -33,6 +33,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class AppPickerActivity extends android.app.Activity {
+    public static final String EXTRA_MODE = "picker_mode";
+    public static final String MODE_JUMP = "jump";
+    public static final String MODE_APP_WHITELIST = "app_whitelist";
+    public static final String MODE_APP_BLACKLIST = "app_blacklist";
+
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final List<AppEntry> all = new ArrayList<>();
     private final List<AppEntry> filtered = new ArrayList<>();
@@ -44,18 +49,26 @@ public class AppPickerActivity extends android.app.Activity {
     private TextView emptyLabel;
     private Set<String> selected = new HashSet<>();
     private AppAdapter adapter;
+    private String mode = MODE_JUMP;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_app_picker);
-        selected = Prefs.jumpTargets(this);
+        String requestedMode = getIntent().getStringExtra(EXTRA_MODE);
+        if (MODE_APP_WHITELIST.equals(requestedMode)
+                || MODE_APP_BLACKLIST.equals(requestedMode)) {
+            mode = requestedMode;
+        }
+        selected = loadSelection();
 
         listView = findViewById(R.id.appList);
         progress = findViewById(R.id.progress);
         searchInput = findViewById(R.id.searchInput);
         selectedCount = findViewById(R.id.selectedCount);
         emptyLabel = findViewById(R.id.emptyLabel);
+
+        bindModeText();
 
         findViewById(R.id.backButton).setOnClickListener(v -> saveAndFinish());
         findViewById(R.id.saveButton).setOnClickListener(v -> saveAndFinish());
@@ -147,12 +160,47 @@ public class AppPickerActivity extends android.app.Activity {
         updateCount();
     }
 
+    private Set<String> loadSelection() {
+        if (MODE_APP_WHITELIST.equals(mode)) {
+            return Prefs.appWhitelist(this);
+        }
+        if (MODE_APP_BLACKLIST.equals(mode)) {
+            return Prefs.appBlacklist(this);
+        }
+        return Prefs.jumpTargets(this);
+    }
+
+    private void bindModeText() {
+        TextView title = findViewById(R.id.pickerTitle);
+        TextView desc = findViewById(R.id.pickerDesc);
+        if (MODE_APP_WHITELIST.equals(mode)) {
+            title.setText(R.string.picker_title_whitelist);
+            desc.setText(R.string.picker_desc_whitelist);
+        } else if (MODE_APP_BLACKLIST.equals(mode)) {
+            title.setText(R.string.picker_title_blacklist);
+            desc.setText(R.string.picker_desc_blacklist);
+        } else {
+            title.setText(R.string.picker_title);
+            desc.setText(R.string.picker_desc);
+        }
+    }
+
     private void updateCount() {
-        selectedCount.setText(getString(R.string.picker_selected, selected.size()));
+        if (MODE_APP_WHITELIST.equals(mode) && selected.isEmpty()) {
+            selectedCount.setText(R.string.picker_whitelist_all);
+        } else {
+            selectedCount.setText(getString(R.string.picker_selected, selected.size()));
+        }
     }
 
     private void saveAndFinish() {
-        Prefs.setJumpTargets(this, selected);
+        if (MODE_APP_WHITELIST.equals(mode)) {
+            Prefs.setAppWhitelist(this, selected);
+        } else if (MODE_APP_BLACKLIST.equals(mode)) {
+            Prefs.setAppBlacklist(this, selected);
+        } else {
+            Prefs.setJumpTargets(this, selected);
+        }
         finish();
     }
 

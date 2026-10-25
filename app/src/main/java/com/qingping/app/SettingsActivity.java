@@ -28,6 +28,8 @@ public class SettingsActivity extends android.app.Activity {
     private Switch switchOnlySplash;
     private Switch switchWatchdog;
     private TextView targetsDesc;
+    private TextView whitelistDesc;
+    private TextView blacklistDesc;
     private TextView batteryDesc;
     private boolean updating;
 
@@ -47,6 +49,8 @@ public class SettingsActivity extends android.app.Activity {
         switchOnlySplash = findViewById(R.id.switchOnlySplash);
         switchWatchdog = findViewById(R.id.switchWatchdog);
         targetsDesc = findViewById(R.id.targetsDesc);
+        whitelistDesc = findViewById(R.id.whitelistDesc);
+        blacklistDesc = findViewById(R.id.blacklistDesc);
         batteryDesc = findViewById(R.id.batteryDesc);
 
         int windowProgress = (int) ((Prefs.launchWindowMs(this) - 3000L) / 1000L);
@@ -161,8 +165,12 @@ public class SettingsActivity extends android.app.Activity {
         });
         findViewById(R.id.rowWatchdog).setOnClickListener(v -> switchWatchdog.toggle());
 
+        findViewById(R.id.rowWhitelist).setOnClickListener(v ->
+                openAppPicker(AppPickerActivity.MODE_APP_WHITELIST));
+        findViewById(R.id.rowBlacklist).setOnClickListener(v ->
+                openAppPicker(AppPickerActivity.MODE_APP_BLACKLIST));
         findViewById(R.id.rowTargets).setOnClickListener(v ->
-                startActivity(new Intent(this, AppPickerActivity.class)));
+                openAppPicker(AppPickerActivity.MODE_JUMP));
         findViewById(R.id.rowBatterySettings).setOnClickListener(v ->
                 GuardUtils.openBatterySettings(this));
         findViewById(R.id.rowClear).setOnClickListener(v -> confirmClear());
@@ -173,6 +181,14 @@ public class SettingsActivity extends android.app.Activity {
         super.onResume();
         int count = Prefs.jumpTargets(this).size();
         targetsDesc.setText(getString(R.string.settings_target_count, count));
+        int whitelistCount = Prefs.appWhitelist(this).size();
+        whitelistDesc.setText(whitelistCount == 0
+                ? getString(R.string.settings_whitelist_all)
+                : getString(R.string.settings_whitelist_count, whitelistCount));
+        int blacklistCount = Prefs.appBlacklist(this).size();
+        blacklistDesc.setText(blacklistCount == 0
+                ? getString(R.string.settings_blacklist_none)
+                : getString(R.string.settings_blacklist_count, blacklistCount));
         boolean batteryOk = GuardUtils.isBatteryOptimizationIgnored(this);
         batteryDesc.setText(batteryOk ? R.string.state_battery_ok : R.string.settings_battery_desc);
         batteryDesc.setTextColor(getColor(batteryOk ? R.color.mint_dark : R.color.muted));
@@ -184,6 +200,12 @@ public class SettingsActivity extends android.app.Activity {
         switchCorner.setChecked(Prefs.cornerFallback(this));
         switchOnlySplash.setChecked(Prefs.onlyDuringLaunch(this));
         updating = false;
+    }
+
+    private void openAppPicker(String mode) {
+        Intent intent = new Intent(this, AppPickerActivity.class);
+        intent.putExtra(AppPickerActivity.EXTRA_MODE, mode);
+        startActivity(intent);
     }
 
     private void updateWindowLabel() {

@@ -26,6 +26,7 @@
             android:tint="@color/ink" />
 
         <TextView
+            android:id="@+id/pickerTitle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="6dp"
@@ -51,6 +52,7 @@
     </LinearLayout>
 
     <TextView
+        android:id="@+id/pickerDesc"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:paddingStart="20dp"

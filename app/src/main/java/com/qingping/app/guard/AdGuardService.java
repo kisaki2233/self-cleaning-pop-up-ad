@@ -19,6 +19,7 @@ import com.qingping.app.data.StatsDb;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -50,6 +51,11 @@ public class AdGuardService extends AccessibilityService {
     private static final long ACTION_COOLDOWN_MS = 1200L;
     private static final long JUMP_COOLDOWN_MS = 2500L;
 
+    /** Only treat a jump as ad-induced while the source page still looks like the same ad. */
+    private static final long AD_PHASE_JUMP_WINDOW_MS = 15_000L;
+    /** Without ad evidence, only a very recent tap inside a freshly opened app can be a mis-tap. */
+    private static final long MISCLICK_FALLBACK_MAX_AGE_MS = 5_000L;
+
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable scanRunnable = new Runnable() {
         @Override
@@ -71,12 +77,16 @@ public class AdGuardService extends AccessibilityService {
     private long jumpWindowMs;
     private int clickDelayMs;
     private Set<String> jumpTargets = new HashSet<>();
+    private Set<String> appWhitelist = new HashSet<>();
+    private Set<String> appBlacklist = new HashSet<>();
     private Set<String> homePackages = new HashSet<>();
     private Set<String> ignoredPackages = new HashSet<>();
 
     private String foregroundPkg;
     private long foregroundSince;
     private String foregroundWindowClass;
+    private boolean foregroundAdPhase;
+    private long foregroundAdPhaseAt;
     private String handledPkg;
     private long lastActionAt;
     private long lastPageResetAt;
@@ -115,6 +125,8 @@ public class AdGuardService extends AccessibilityService {
         jumpWindowMs = Prefs.jumpWindowMs(this);
         clickDelayMs = Prefs.clickDelayMs(this);
         jumpTargets = Prefs.jumpTargets(this);
+        appWhitelist = Prefs.appWhitelist(this);
+        appBlacklist = Prefs.appBlacklist(this);
 
         homePackages = Rules.getHomePackages(this);
         ignoredPackages = new HashSet<>();
@@ -142,9 +154,11 @@ public class AdGuardService extends AccessibilityService {
                 return;
             }
             String pkg = root.getPackageName().toString();
-            if (!pkg.equals(getPackageName()) && !homePackages.contains(pkg)) {
+            if (!pkg.equals(getPackageName()) && !isBoundaryPackage(pkg)) {
                 foregroundPkg = pkg;
                 foregroundWindowClass = null;
+                foregroundAdPhase = false;
+                foregroundAdPhaseAt = 0;
                 // We joined mid-session: don't treat the current app as freshly launched.
                 foregroundSince = SystemClock.uptimeMillis() - extendedWatchMs() - 1L;
             }
@@ -163,6 +177,7 @@ public class AdGuardService extends AccessibilityService {
         }
         String pkg = pkgCs.toString();
         int type = event.getEventType();
+        String windowClass = classNameOf(event);
         long now = SystemClock.uptimeMillis();
 
         if (type == AccessibilityEvent.TYPE_VIEW_CLICKED
@@ -177,16 +192,15 @@ public class AdGuardService extends AccessibilityService {
             return;
         }
 
-        // Going home is an explicit boundary: never treat a launch from the launcher as an ad jump.
-        if (homePackages.contains(pkg)) {
-            foregroundPkg = null;
-            foregroundSince = 0;
-            foregroundWindowClass = null;
-            handledPkg = null;
-            lastPageResetAt = 0;
-            scanAttempts = 0;
-            extendedPhaseLogged = false;
-            cancelScheduledScan();
+        // Home, recents and System UI are explicit boundaries. Most importantly, they break the
+        // "previous app -> target app" chain, so opening Taobao/Netdisk from the launcher or the
+        // recents screen can never be mistaken for an ad mis-tap.
+        if (isBoundaryWindow(pkg, windowClass)) {
+            // Only a real window change means "the user is now on home/recents". System UI also
+            // emits content/click events for the status bar, which must not wipe the source app.
+            if (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+                clearForegroundState();
+            }
             return;
         }
         if (ignoredPackages.contains(pkg)) {
@@ -194,7 +208,6 @@ public class AdGuardService extends AccessibilityService {
         }
 
         if (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            String windowClass = classNameOf(event);
             boolean appChanged = !pkg.equals(foregroundPkg);
             if (appChanged) {
                 String previous = foregroundPkg;
@@ -209,14 +222,18 @@ public class AdGuardService extends AccessibilityService {
                 cancelScheduledScan();
                 Log.d(TAG, "foreground=" + pkg + " class=" + windowClass);
 
-                if (jumpEnabled && jumpTargets.contains(pkg)
-                        && shouldBlockJump(previous, pkg, previousSince, now)) {
+                // Evaluate the jump while foregroundAdPhase still describes the *source* page.
+                boolean block = jumpEnabled && jumpTargets.contains(pkg)
+                        && shouldBlockJump(previous, pkg, previousSince, now);
+                foregroundAdPhase = false;
+                foregroundAdPhaseAt = 0;
+                if (block) {
                     blockJump(previous, pkg, now);
                     return;
                 }
-                if (!jumpTargets.contains(pkg)) {
-                    scheduleScan(220L);
-                }
+                // A jump-list app can still show its own splash ad (Baidu Netdisk is exactly this
+                // case). Do not exclude it from splash scanning just because it is a landing app.
+                scheduleScan(220L);
             } else {
                 // A long branding/loading activity often hands over to a separate ad activity in
                 // the same package. Treat that as a fresh page: otherwise the retry budget has
@@ -230,6 +247,12 @@ public class AdGuardService extends AccessibilityService {
                 if (pageChanged) {
                     Log.d(TAG, "page=" + windowClass + " age=" + (now - foregroundSince)
                             + "ms scans=" + scanAttempts);
+                    // After a successful skip, the ad is gone; don't let its evidence suppress a
+                    // later, intentional navigation.
+                    if (pkg.equals(handledPkg)) {
+                        foregroundAdPhase = false;
+                        foregroundAdPhaseAt = 0;
+                    }
                 }
                 if (pageChanged && now - foregroundSince <= extendedWatchMs()
                         && now - lastPageResetAt >= 1500L) {
@@ -251,19 +274,44 @@ public class AdGuardService extends AccessibilityService {
         if (previous == null || previous.equals(target)) {
             return false;
         }
-        if (ignoredPackages.contains(previous) || jumpTargets.contains(previous)) {
+        // The source must be a real app, not the launcher, recents, an IME or a system dialog.
+        if (isBoundaryPackage(previous) || ignoredPackages.contains(previous)) {
+            return false;
+        }
+        // App scope applies to the source app: if the user excluded it, neither skip nor return
+        // should act on its behalf.
+        if (!isAppAllowed(previous)) {
             return false;
         }
         long sourceAge = now - previousSince;
-        long maxAge = onlyDuringLaunch ? launchWindowMs : jumpWindowMs;
-        if (sourceAge > maxAge) {
-            return false;
-        }
-        if (!onlyDuringLaunch) {
-            boolean recentClick = previous.equals(lastInteractionPkg)
-                    && now - lastInteractionAt <= 2500L;
-            if (!recentClick && sourceAge > 1500L) {
+        boolean recentClick = previous.equals(lastInteractionPkg)
+                && now - lastInteractionAt <= 2500L;
+        // If the source page itself showed an explicit ad-dismiss button, a jump away from it is
+        // almost certainly an ad jump (including "shake to jump" ads). This is what allows a
+        // return when the source is itself in the jump-target list, e.g. Baidu Netdisk.
+        boolean sourceAdPhase = foregroundAdPhase
+                && sourceAge <= extendedWatchMs()
+                && now - foregroundAdPhaseAt <= AD_PHASE_JUMP_WINDOW_MS;
+        Log.d(TAG, "jump? source=" + previous + " target=" + target + " age=" + sourceAge
+                + "ms adPhase=" + sourceAdPhase + " recentClick=" + recentClick);
+
+        if (!sourceAdPhase) {
+            // Target-to-target chains are ordinary navigation, not a splash-ad mis-tap.
+            if (jumpTargets.contains(previous)) {
                 return false;
+            }
+            if (onlyDuringLaunch) {
+                if (!recentClick
+                        || sourceAge > Math.min(launchWindowMs, MISCLICK_FALLBACK_MAX_AGE_MS)) {
+                    return false;
+                }
+            } else {
+                if (sourceAge > jumpWindowMs) {
+                    return false;
+                }
+                if (!recentClick && sourceAge > 1500L) {
+                    return false;
+                }
             }
         }
         return !(target.equals(lastBlockedTarget) && now - lastBlockedAt < JUMP_COOLDOWN_MS);
@@ -275,6 +323,7 @@ public class AdGuardService extends AccessibilityService {
         suppressSplashUntil = now + 2500L;
         String sourceLabel = AppInfoUtils.label(this, source);
         String targetLabel = AppInfoUtils.label(this, target);
+        Log.i(TAG, "block jump " + source + " -> " + target);
         StatsDb.get(this).record(source, sourceLabel, StatsDb.KIND_JUMP, target, targetLabel);
         if (showToast) {
             GuardUtils.toast(this, getString(R.string.toast_jump, targetLabel));
@@ -312,6 +361,56 @@ public class AdGuardService extends AccessibilityService {
     }
 
     /**
+     * The launcher/recents are not "the previous app" when the user opens another app from them.
+     * Some ROMs report the launcher as System UI or use an OEM-specific package that does not
+     * resolve through CATEGORY_HOME, so use both the resolved set and a conservative name check.
+     */
+    private boolean isBoundaryPackage(String pkg) {
+        if (pkg == null) {
+            return true;
+        }
+        if (homePackages.contains(pkg) || "com.android.systemui".equals(pkg)) {
+            return true;
+        }
+        String p = pkg.toLowerCase(Locale.ROOT);
+        return p.contains("launcher")
+                || p.contains("quickstep")
+                || p.contains("recents")
+                || p.contains("overview")
+                || p.endsWith(".home")
+                || p.contains(".home.");
+    }
+
+    /**
+     * System UI owns recents on some ROMs, but also owns the status bar/volume dialog. Only its
+     * recents/overview window is a boundary; otherwise hiding the status bar during a fullscreen ad
+     * would incorrectly wipe the source app.
+     */
+    private boolean isBoundaryWindow(String pkg, String windowClass) {
+        if ("com.android.systemui".equals(pkg)) {
+            if (windowClass == null) {
+                return false;
+            }
+            String c = windowClass.toLowerCase(Locale.ROOT);
+            return c.contains("recents") || c.contains("overview") || c.contains("quickstep");
+        }
+        return isBoundaryPackage(pkg);
+    }
+
+    private void clearForegroundState() {
+        foregroundPkg = null;
+        foregroundSince = 0;
+        foregroundWindowClass = null;
+        foregroundAdPhase = false;
+        foregroundAdPhaseAt = 0;
+        handledPkg = null;
+        lastPageResetAt = 0;
+        scanAttempts = 0;
+        extendedPhaseLogged = false;
+        cancelScheduledScan();
+    }
+
+    /**
      * How long we are willing to wait for a delayed splash ad. The user's "启动保护时长" still
      * defines when generic close buttons and mis-tap returns are allowed; this longer cap only
      * keeps looking for unambiguous "跳过/关闭广告" buttons.
@@ -328,12 +427,25 @@ public class AdGuardService extends AccessibilityService {
         return now - foregroundSince <= extendedWatchMs();
     }
 
+    /**
+     * App-level scope, modeled after the app lists used by Li Tiaotiao/GKD: an empty whitelist
+     * means "all apps"; a blacklist entry always wins. It gates both splash skipping and
+     * returns attributed to that source app. The separate jump-target list still controls
+     * which landing apps are eligible for a return.
+     */
+    private boolean isAppAllowed(String pkg) {
+        if (appBlacklist.contains(pkg)) {
+            return false;
+        }
+        return appWhitelist.isEmpty() || appWhitelist.contains(pkg);
+    }
+
     private void scheduleScan(long delay) {
         if (!master || !splashEnabled || scanScheduled) {
             return;
         }
         if (foregroundPkg == null || ignoredPackages.contains(foregroundPkg)
-                || jumpTargets.contains(foregroundPkg)) {
+                || !isAppAllowed(foregroundPkg)) {
             return;
         }
         long now = SystemClock.uptimeMillis();
@@ -351,7 +463,8 @@ public class AdGuardService extends AccessibilityService {
 
     private void runScan() {
         scanScheduled = false;
-        if (!master || !splashEnabled || foregroundPkg == null) {
+        if (!master || !splashEnabled || foregroundPkg == null
+                || !isAppAllowed(foregroundPkg)) {
             return;
         }
         long now = SystemClock.uptimeMillis();
@@ -396,6 +509,15 @@ public class AdGuardService extends AccessibilityService {
             // The window can disappear mid-traversal; never let that crash the guard.
             return;
         }
+        // Remember that this cold start really showed an ad-dismiss button. If the ad then opens
+        // a landing app, this is the evidence that lets the jump guard return even when the source
+        // app is itself in the user's jump-target list.
+        if (state.explicitAd) {
+            foregroundAdPhase = true;
+            foregroundAdPhaseAt = SystemClock.uptimeMillis();
+            Log.d(TAG, "ad phase pkg=" + pkg + " age=" + (foregroundAdPhaseAt - foregroundSince) + "ms");
+        }
+
         // Outside the strict launch window only click labels that explicitly say they dismiss
         // an ad. A generic "关闭/×" is too easy to confuse with normal app UI on a page the user
         // may have reached much later.
@@ -474,6 +596,9 @@ public class AdGuardService extends AccessibilityService {
                 Rect b = new Rect();
                 node.getBoundsInScreen(b);
                 if (isUsableBounds(b)) {
+                    if (skip || closeAd) {
+                        state.explicitAd = true;
+                    }
                     int kind;
                     int score;
                     if (skip) {
@@ -605,6 +730,7 @@ public class AdGuardService extends AccessibilityService {
     private static final class ScanState {
         int nodes;
         boolean adMarker;
+        boolean explicitAd;
         final List<Candidate> candidates = new ArrayList<>();
 
         Candidate best(boolean hasAd, boolean allowGenericClose) {
